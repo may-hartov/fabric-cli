@@ -45,13 +45,24 @@ commands:
       - notebook
       - data_pipeline
       - lakehouse
+      - semantic_model
     subcommands:
       run:
       run_cancel:
+        unsupported_items:
+          - semantic_model
       run_list:
+        unsupported_items:
+          - semantic_model
       run_update:
+        unsupported_items:
+          - semantic_model
       run_sch:
+        unsupported_items:
+          - semantic_model
       run-rm:
+        unsupported_items:
+          - semantic_model
       run_status:
       run_wait:
   

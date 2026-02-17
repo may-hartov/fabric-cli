@@ -8,6 +8,7 @@ from argparse import Namespace
 from typing import Any, Optional
 
 from requests.structures import CaseInsensitiveDict
+
 from fabric_cli.client import fab_api_jobs as jobs_api
 from fabric_cli.client.fab_api_types import ApiResponse
 from fabric_cli.core import fab_constant, fab_logger
@@ -15,8 +16,8 @@ from fabric_cli.core.fab_exceptions import FabricCLIError
 from fabric_cli.core.fab_types import FabricJobType
 from fabric_cli.core.hiearchy.fab_hiearchy import Item
 from fabric_cli.errors import ErrorMessages
-from fabric_cli.utils.fab_http_polling_utils import get_polling_interval
 from fabric_cli.utils import fab_ui
+from fabric_cli.utils.fab_http_polling_utils import get_polling_interval
 
 
 def add_item_props_to_args(args: Namespace, context: Item) -> None:
@@ -31,6 +32,16 @@ def add_item_props_to_args(args: Namespace, context: Item) -> None:
 def build_config_from_args(
     args: Namespace, item: Item, schedule: Optional[bool] = False
 ):
+    # Semantic model refresh does not support -P/--params or -i/--input parameters
+    if item.job_type == FabricJobType.SEMANTIC_MODEL_REFRESH:
+        if getattr(args, "params", None) or getattr(args, "input", None):
+            raise FabricCLIError(
+                ErrorMessages.Job.semantic_model_refresh_params_not_supported(),
+                fab_constant.ERROR_NOT_RUNNABLE,
+            )
+        # No configuration needed for semantic model refresh
+        return
+
     # Input and Params cannot be used at the same time because they affect the same property
     if getattr(args, "input", None) and (
         getattr(args, "params", None) or getattr(args, "config", None)
@@ -50,10 +61,11 @@ def build_config_from_args(
 
 def wait_for_job_completion(
     job_args: Namespace,
-    job_ins_id,
+    job_ins_id: str,
     job_response: ApiResponse,
     timeout: Optional[int] = None,
-    custom_polling_interval: Optional[int] = None
+    custom_polling_interval: Optional[int] = None,
+    is_semantic_model_refresh: bool = False,
 ) -> None:
     args = Namespace(
         ws_id=getattr(job_args, "ws_id", None),
@@ -66,12 +78,22 @@ def wait_for_job_completion(
         ),
         output_format=getattr(job_args, "output_format", None),
     )
+
+    if is_semantic_model_refresh:
+        from fabric_cli.utils import fab_cmd_semantic_model_utils as sm_utils
+
+        get_status_func = sm_utils.create_refresh_status_function(job_response, args)
+    else:
+        get_status_func = jobs_api.get_item_job_instance
+
     attempts = 0
     status = "NotStarted"
     content = None
 
-    initial_interval = get_polling_interval(job_response.headers, custom_polling_interval)
-    if (timeout is not None and timeout < initial_interval):
+    initial_interval = get_polling_interval(
+        job_response.headers, custom_polling_interval
+    )
+    if timeout is not None and timeout < initial_interval:
         initial_interval = timeout
     time.sleep(initial_interval)
     total_wait_time = initial_interval
@@ -79,22 +101,31 @@ def wait_for_job_completion(
     # Retry until the job is completed or the timeout is reached
     while timeout is None or total_wait_time < timeout:
         _t1 = time.time()
-        response = jobs_api.get_item_job_instance(args)
+        response = get_status_func(args)
         api_call_time = int(time.time() - _t1)
-        
+
         # Add API call time to total wait time
         total_wait_time += api_call_time
 
-        if response.status_code == 200:
+        if response.status_code == 200 or (
+            is_semantic_model_refresh and response.status_code == 202
+        ):
             content = json.loads(response.text)
-            status = content["status"]
 
-            # Available statuses are: NotStarted, InProgress, Completed, Deduped, Failed, Cancelled
-            if status in ["Completed", "Cancelled", "Deduped"]:
+            if is_semantic_model_refresh:
+                status = content.get(
+                    "extendedStatus", content.get("status", "Unavailable")
+                )
+            else:
+                status = content.get("status", "Unknown")
+
+            # Available statuses: NotStarted, InProgress, Completed, Deduped, Failed, Cancelled, TimedOut, Disabled
+            if status in ["Completed", "Cancelled", "Deduped", "TimedOut", "Disabled"]:
                 fab_ui.print_progress(f"Job instance status: {status}")
                 if status == "Completed":
                     fab_ui.print_output_format(
-                        args, message=f"Job instance '{job_ins_id}' completed"
+                        args,
+                        message=f"Job instance '{job_ins_id}' completed successfully",
                     )
                 else:
                     fab_logger.log_warning(
@@ -103,15 +134,20 @@ def wait_for_job_completion(
                 return
             elif status == "Failed":
                 fab_ui.print_entries_unix_style([content], content.keys(), header=True)
+
                 raise FabricCLIError(
-                        ErrorMessages.Common.job_instance_failed(job_ins_id),
-                        fab_constant.ERROR_JOB_FAILED,
-                    )
-            elif status in ["NotStarted", "InProgress"]:
+                    ErrorMessages.Common.job_instance_failed(job_ins_id),
+                    fab_constant.ERROR_JOB_FAILED,
+                )
+            elif status in ["NotStarted", "InProgress"] or (
+                status == "Unknown" and is_semantic_model_refresh
+            ):
                 fab_ui.print_progress(f"Job instance status: {status}")
-                
-                interval = get_polling_interval(response.headers, custom_polling_interval)
-                
+
+                interval = get_polling_interval(
+                    response.headers, custom_polling_interval
+                )
+
                 time.sleep(interval)
                 total_wait_time += interval
 
@@ -126,8 +162,6 @@ def wait_for_job_completion(
     raise TimeoutError(
         f"Job instance '{job_ins_id}' timed out after {total_wait_time} seconds"
     )
-
-
 
 
 def _extract_times(times: str) -> list[str]:
@@ -405,7 +439,7 @@ def _process_params(args: Namespace, item: Item) -> None:
                 )
 
         if getattr(args, "configuration", None):
-            # Merge the configuration properties with the existing parameters
+            # Merge with existing configuration from -C/--config (notebooks only)
             _config_str: str = str(args.configuration)
             current_config = json.loads(_config_str)
             current_config["parameters"] = params
@@ -420,8 +454,12 @@ def validate_timeout_polling_interval(args: Namespace) -> None:
     """Validate that polling interval is not greater than or equal to timeout."""
     timeout = getattr(args, "timeout", None)
     polling_interval = getattr(args, "polling_interval", None)
-    
-    if timeout is not None and polling_interval is not None and polling_interval >= timeout:
+
+    if (
+        timeout is not None
+        and polling_interval is not None
+        and polling_interval >= timeout
+    ):
         raise FabricCLIError(
             f"Custom polling interval ({polling_interval}s) cannot be greater than or equal to timeout ({timeout}s)",
             fab_constant.ERROR_INVALID_INPUT,

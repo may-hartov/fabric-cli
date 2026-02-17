@@ -9,6 +9,7 @@ from .context import ContextErrors
 from .cp import CpErrors
 from .export import ExportErrors
 from .hierarchy import HierarchyErrors
+from .job import JobErrors
 from .labels import LabelsErrors
 from .mkdir import MkdirErrors
 from .mv import MvErrors
@@ -25,6 +26,7 @@ class ErrorMessages:
     Cp = CpErrors
     Export = ExportErrors
     Hierarchy = HierarchyErrors
+    Job = JobErrors
     Labels = LabelsErrors
     Mkdir = MkdirErrors
     Mv = MvErrors
