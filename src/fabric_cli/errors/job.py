@@ -11,8 +11,5 @@ class JobErrors:
         )
 
     @staticmethod
-    def dataset_refresh_params_not_supported() -> str:
-        return (
-            "Dataset refresh does not support -P/--params or -i/--input parameters. "
-            "The refresh will use the default payload with retryCount=0."
-        )
+    def semantic_model_refresh_params_not_supported() -> str:
+        return "Semantic model refresh does not support -P/--params or -i/--input parameters. "

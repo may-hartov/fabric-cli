@@ -32,14 +32,14 @@ def add_item_props_to_args(args: Namespace, context: Item) -> None:
 def build_config_from_args(
     args: Namespace, item: Item, schedule: Optional[bool] = False
 ):
-    # Dataset refresh does not support -P/--params or -i/--input parameters
-    if item.job_type == FabricJobType.DATASET_REFRESH:
+    # Semantic model refresh does not support -P/--params or -i/--input parameters
+    if item.job_type == FabricJobType.SEMANTIC_MODEL_REFRESH:
         if getattr(args, "params", None) or getattr(args, "input", None):
             raise FabricCLIError(
-                ErrorMessages.Job.dataset_refresh_params_not_supported(),
+                ErrorMessages.Job.semantic_model_refresh_params_not_supported(),
                 fab_constant.ERROR_NOT_RUNNABLE,
             )
-        # No configuration needed for dataset refresh
+        # No configuration needed for semantic model refresh
         return
 
     # Input and Params cannot be used at the same time because they affect the same property
@@ -65,7 +65,7 @@ def wait_for_job_completion(
     job_response: ApiResponse,
     timeout: Optional[int] = None,
     custom_polling_interval: Optional[int] = None,
-    is_dataset_refresh: bool = False,
+    is_semantic_model_refresh: bool = False,
 ) -> None:
     args = Namespace(
         ws_id=getattr(job_args, "ws_id", None),
@@ -79,7 +79,7 @@ def wait_for_job_completion(
         output_format=getattr(job_args, "output_format", None),
     )
 
-    if is_dataset_refresh:
+    if is_semantic_model_refresh:
         from fabric_cli.utils import fab_cmd_semantic_model_utils as sm_utils
 
         get_status_func = sm_utils.create_refresh_status_function(job_response, args)
@@ -108,11 +108,11 @@ def wait_for_job_completion(
         total_wait_time += api_call_time
 
         if response.status_code == 200 or (
-            is_dataset_refresh and response.status_code == 202
+            is_semantic_model_refresh and response.status_code == 202
         ):
             content = json.loads(response.text)
 
-            if is_dataset_refresh:
+            if is_semantic_model_refresh:
                 status = content.get(
                     "extendedStatus", content.get("status", "Unavailable")
                 )
@@ -140,7 +140,7 @@ def wait_for_job_completion(
                     fab_constant.ERROR_JOB_FAILED,
                 )
             elif status in ["NotStarted", "InProgress"] or (
-                status == "Unknown" and is_dataset_refresh
+                status == "Unknown" and is_semantic_model_refresh
             ):
                 fab_ui.print_progress(f"Job instance status: {status}")
 

@@ -11,18 +11,13 @@ from fabric_cli.utils import fab_ui
 
 
 def exec_command(args: Namespace, context: Item) -> None:
-    """
-    Execute job run-status command.
-    Routes to appropriate implementation based on job type.
-    """
-    if context.job_type == FabricJobType.DATASET_REFRESH:
+    if context.job_type == FabricJobType.SEMANTIC_MODEL_REFRESH:
         _exec_semantic_model_status(args, context)
     else:
         _exec_fabric_job_status(args, context)
 
 
 def _exec_fabric_job_status(args: Namespace, context: Item) -> None:
-    """Get Fabric job status (existing implementation for non-semantic model items)."""
     if args.schedule:
         args.schedule_id = args.id
         response = jobs_api.get_item_schedule(args)
@@ -36,7 +31,6 @@ def _exec_fabric_job_status(args: Namespace, context: Item) -> None:
 
 
 def _exec_semantic_model_status(args: Namespace, context: Item) -> None:
-    """Get semantic model refresh status."""
     from fabric_cli.client import fab_api_semantic_model as semantic_model_api
 
     # Semantic models don't support schedules via the job run-status command
@@ -58,38 +52,19 @@ def _exec_semantic_model_status(args: Namespace, context: Item) -> None:
     if response.status_code == 200:
         # Transform to match Fabric Job Instance format
         content = json.loads(response.text)
-        transformed = _transform_to_job_instance_format(content, args.id, context.id)
+        transformed = _transform_to_job_instance_format(
+            content, args.id, context.id)
         fab_ui.print_output_format(args, data=transformed, show_headers=True)
-    elif response.status_code == 202:
-        # For 202 (Accepted) responses, log the entire response as-is
-        content = json.loads(response.text)
-        fab_ui.print_output_format(args, data=content, show_headers=True)
+    # get execution details can retun 202, need to handle
+    # elif response.status_code == 202:
+    #     # For 202 (Accepted) responses, log the entire response as-is
+    #     content = json.loads(response.text)
+    #     fab_ui.print_output_format(args, data=content, show_headers=True)
 
 
 def _transform_to_job_instance_format(
     content: dict, refresh_id: str, item_id: str
 ) -> dict:
-    """
-    Transform Power BI DatasetRefreshDetail response to match Fabric ItemJobInstance format.
-
-    Maps fields as follows:
-    - id: refresh_id (from user input)
-    - itemId: item_id (dataset ID from user request)
-    - jobType: "RefreshDataset"
-    - invokeType: initiatedBy from response
-    - status: extendedStatus if exists, otherwise status
-    - startTimeUtc: startTime from response
-    - endTimeUtc: endTime from response
-    - failureReason: messages where type == "Error" (only if status indicates failure)
-
-    Args:
-        content: Power BI DatasetRefreshDetail response
-        refresh_id: Refresh ID from user input
-        item_id: Dataset ID from context
-
-    Returns:
-        Transformed dict matching Fabric ItemJobInstance format
-    """
     # Get status - prefer extendedStatus, fallback to status
     status = content.get("extendedStatus") or content.get("status")
 
@@ -97,8 +72,8 @@ def _transform_to_job_instance_format(
     transformed = {
         "id": refresh_id,
         "itemId": item_id,
-        "jobType": "RefreshDataset",
-        "invokeType": content.get("initiatedBy", "Unknown"),
+        "jobType": "RefreshSemanticModel",
+        "invokeType": content.get("currentRefreshType", "Unknown"),
         "status": status,
         "startTimeUtc": content.get("startTime"),
         "endTimeUtc": content.get("endTime"),
@@ -114,16 +89,6 @@ def _transform_to_job_instance_format(
 
 
 def _extract_failure_reason(messages: list) -> dict:
-    """
-    Extract failure details from messages array.
-    Returns error messages where type == "Error".
-
-    Args:
-        messages: List of message objects from Power BI response
-
-    Returns:
-        Dict containing error messages, or None if no errors found
-    """
     if not messages:
         return None
 

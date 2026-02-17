@@ -10,9 +10,9 @@ from fabric_cli.core.fab_exceptions import FabricCLIError
 from fabric_cli.errors import ErrorMessages
 
 
-def extract_dataset_refresh_id(response: ApiResponse) -> str:
+def extract_semantic_model_refresh_id(response: ApiResponse) -> str:
     """
-    Extract refresh ID from the POST datasets/refreshes response.
+    Extract refresh ID from the POST semantic model refreshes response.
 
     Tries to get the refreshId from the Location header first. If not present,
     falls back to the RequestId header.
@@ -45,13 +45,13 @@ def create_refresh_status_function(
     job_response: ApiResponse, args: Namespace
 ) -> Callable[[Namespace], ApiResponse]:
     """
-    Create a status polling function for dataset refresh.
+    Create a status polling function for semantic model refresh.
 
     This function determines the appropriate API method to use based on the
-    response headers from the POST dataset refresh trigger operation.
+    response headers from the POST semantic model refresh trigger operation.
 
     Args:
-        job_response: Initial API response from dataset refresh trigger
+        job_response: Initial API response from semantic model refresh trigger
         args: Namespace containing ws_id and item_id
 
     Returns:
@@ -68,9 +68,9 @@ def create_refresh_status_function(
             a, refresh_url=refresh_location_url
         )
 
-    # Fallback: use extract_dataset_refresh_id to get the refresh ID
+    # Fallback: use extract_semantic_model_refresh_id to get the refresh ID
     # and call get_refresh_execution_details (IDs extracted from args)
-    refresh_id = extract_dataset_refresh_id(job_response)
+    refresh_id = extract_semantic_model_refresh_id(job_response)
 
     def polling_func(a: Namespace) -> ApiResponse:
         # Ensure args has the required attributes for get_refresh_execution_details
