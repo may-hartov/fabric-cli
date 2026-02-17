@@ -326,6 +326,7 @@ class FabricJobType(Enum):
     RUN_NOTEBOOK = "RunNotebook"
     PIPELINE = "Pipeline"
     TABLE_MAINTENANCE = "TableMaintenance"
+    DATASET_REFRESH = "DatasetRefresh"
 
 
 ITJobMap: dict[ItemType, FabricJobType] = {
@@ -337,6 +338,8 @@ ITJobMap: dict[ItemType, FabricJobType] = {
     ItemType.DATA_PIPELINE: FabricJobType.PIPELINE,
     # {"tableName": "orders", "optimizeSettings": {"vOrder": true, "zOrderBy": ["account_id"]}, "vacuumSettings": {"retentionPeriod": "7.01:00:00"}}
     ItemType.LAKEHOUSE: FabricJobType.TABLE_MAINTENANCE,
+    # {"applyRefreshPolicy": true, "commitMode": "Transactional", "retryCount": 3}
+    ItemType.SEMANTIC_MODEL: FabricJobType.DATASET_REFRESH,
 }
 
 ###################################
