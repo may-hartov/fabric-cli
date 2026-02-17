@@ -20,7 +20,6 @@ def refresh_semantic_model(args: Namespace, payload: str) -> ApiResponse:
 
     response = fabric_api.do_request(args, data=payload)
 
-    # Restore the original wait value for job polling
     args.wait = original_wait
 
     return response
@@ -30,7 +29,6 @@ def get_refresh_execution_details(args: Namespace) -> ApiResponse:
     """
     https://learn.microsoft.com/en-us/rest/api/power-bi/datasets/get-refresh-execution-details-in-group
     """
-    # Extract refresh ID from args (supports both instance_id and refresh_id attributes)
     refresh_id = getattr(args, "instance_id", None) or getattr(args, "refresh_id", None)
 
     if not refresh_id:

@@ -66,7 +66,6 @@ def _wait_for_job_with_timeout(
         )
     except TimeoutError as e:
         fab_ui.print_warning(str(e))
-        # Get the configuration to check if we should cancel the job
         if config.get_config(con.FAB_JOB_CANCEL_ONTIMEOUT) == "false":
             fab_ui.print_grey(
                 f"Job still running. To change this behaviour and cancel on timeout, set {con.FAB_JOB_CANCEL_ONTIMEOUT} config property to 'true'"

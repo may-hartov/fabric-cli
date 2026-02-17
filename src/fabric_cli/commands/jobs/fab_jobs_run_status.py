@@ -33,8 +33,6 @@ def _exec_fabric_job_status(args: Namespace, context: Item) -> None:
 def _exec_semantic_model_status(args: Namespace, context: Item) -> None:
     from fabric_cli.client import fab_api_semantic_model as semantic_model_api
 
-    # Semantic models don't support schedules via the job run-status command
-    # (they would use Power BI's own refresh schedule API)
     if args.schedule:
         fab_ui.print_warning(
             "Schedule status not supported for semantic models via this command. "
@@ -42,7 +40,6 @@ def _exec_semantic_model_status(args: Namespace, context: Item) -> None:
         )
         return
 
-    # Set required IDs from context
     args.ws_id = context.workspace.id
     args.item_id = context.id
     args.instance_id = args.id
@@ -50,10 +47,8 @@ def _exec_semantic_model_status(args: Namespace, context: Item) -> None:
     response = semantic_model_api.get_refresh_execution_details(args)
 
     if response.status_code == 200:
-        # Transform to match Fabric Job Instance format
         content = json.loads(response.text)
-        transformed = _transform_to_job_instance_format(
-            content, args.id, context.id)
+        transformed = _transform_to_job_instance_format(content, args.id, context.id)
         fab_ui.print_output_format(args, data=transformed, show_headers=True)
     # get execution details can retun 202, need to handle
     # elif response.status_code == 202:
@@ -65,10 +60,8 @@ def _exec_semantic_model_status(args: Namespace, context: Item) -> None:
 def _transform_to_job_instance_format(
     content: dict, refresh_id: str, item_id: str
 ) -> dict:
-    # Get status - prefer extendedStatus, fallback to status
     status = content.get("extendedStatus") or content.get("status")
 
-    # Build base response matching ItemJobInstance schema
     transformed = {
         "id": refresh_id,
         "itemId": item_id,
@@ -79,7 +72,6 @@ def _transform_to_job_instance_format(
         "endTimeUtc": content.get("endTime"),
     }
 
-    # Add failureReason only if status indicates failure
     if status and status.lower() not in ["completed", "success"]:
         failure_reason = _extract_failure_reason(content.get("messages", []))
         if failure_reason:
